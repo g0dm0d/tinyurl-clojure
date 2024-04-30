@@ -1,0 +1,1 @@
+(ns tinyurl.core-test)

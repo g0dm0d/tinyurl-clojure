@@ -12,6 +12,9 @@
 (defn valid-url? [url]
   (re-matches #"^(https?):\/\/[^\s\/$.?#].[^\s]*$" url))
 
+(defn is-admin? [headers]
+  (= (System/getenv "APP_AUTH") (get headers "auth")))
+
 (defn shorten-url [original-url]
   (let [short-url (generate-short-url 6)]
     (save-url short-url original-url)
@@ -34,21 +37,24 @@
                (shorten-url original-url)))))
   (GET "/:short-url" [short-url]
     (redirect-url short-url))
-  (DELETE "/short-url/:short-url" [short-url]
-    (if (delete-url short-url)
-      {:status 200}
-      {:status 404}))
+  (DELETE "/short-url/:short-url" request
+    (if (is-admin? (:headers request))
+      (if (delete-url (:short-url (:params request)))
+        {:status 200}
+        {:status 404})
+      {:status 401}))
   (PUT "/short-url/:short-url" request
-    println (:params request)
-    (let [original-url (slurp (:body request)) short-url (:short-url (:params request))]
-      (if (valid-url? original-url)
-        (try 
-          (if (update-url short-url original-url)
-               {:status 200}
-               {:status 404})
-          (catch java.sql.BatchUpdateException _
-            {:status 409})) 
-        {:status 400})))
+    (if (is-admin? (:headers request))
+     (let [original-url (slurp (:body request)) short-url (:short-url (:params request))]
+       (if (valid-url? original-url)
+         (try 
+           (if (update-url short-url original-url)
+             {:status 200}
+             {:status 404})
+           (catch java.sql.BatchUpdateException _
+             {:status 409})) 
+         {:status 400}))
+      {:status 401}))
   (route/not-found "Page not found"))
 
 (defn -main []
